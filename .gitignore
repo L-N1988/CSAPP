@@ -1,0 +1,7 @@
+*.png
+a.out
+*.tar
+*.pdf
+siyu.c
+bitOps/*
+showByte.c
