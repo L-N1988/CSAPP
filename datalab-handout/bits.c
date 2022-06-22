@@ -250,7 +250,7 @@ int isLessOrEqual(int x, int y) {
     int minus = y + (~x) + 1;
     int flag = minus >> 31;
     int overflow = cY ^ flag;
-    // if overflow == 1 && mix == 1, reutrn flag
+    // if overflow == 1 && mix == 1, return flag
     int a = (overflow & mix) & flag;
     // if overflow == 0 || mix == 0, return !flag
     int b = !(overflow & mix) & !flag;
@@ -315,7 +315,19 @@ int howManyBits(int x) {
  *   Rating: 4
  */
 unsigned floatScale2(unsigned uf) {
-  return 2;
+    unsigned sign = uf >> 31;
+    unsigned exp = (uf >> 23) & 0x000000ff;
+    unsigned frac = (uf << 9) >> 9;
+    // denormalized number just left shift 1 bit.
+    if (!exp) {
+        return (sign << 31) + (frac << 1);
+    } else if (!(exp ^ 0x000000ff)) {
+        // for special values, just return itself.
+        return uf;
+    } else {
+        // for normalized number, exp + 1 and rebuild
+        return (sign << 31) + ((exp + 1) << 23) + frac;
+    }
 }
 /* 
  * floatFloat2Int - Return bit-level equivalent of expression (int) f
@@ -330,7 +342,35 @@ unsigned floatScale2(unsigned uf) {
  *   Rating: 4
  */
 int floatFloat2Int(unsigned uf) {
-  return 2;
+    unsigned sign = uf >> 31;
+    unsigned exp = (uf >> 23) & 0x000000ff;
+    unsigned frac = (uf << 9) >> 9;
+    int bias = (1 << 7) - 1;
+    int E = exp - bias;
+    int rShift = 23 - E;
+    // special values.
+    if (!(exp ^ 0x000000ff)) {
+        return 1 << 31;
+    } else if (!exp) {
+        // denormalized number, return zero.
+        return 0;
+    } else {
+        if (E < 0) {
+            return 0;
+        } else {
+            // out of 32bit integer ranger -2^31 ~ 2^31-1.
+            if (E > 31) {
+                return 1 << 31;
+            }
+            // sign == 0, return positive number,
+            // else, return negative number.
+            if (!sign) {
+                return (1 << E) + (frac >> rShift);
+            } else {
+                return -1 * ((1 << E) + (frac >> rShift));
+            }
+        }
+    }
 }
 /* 
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
@@ -346,5 +386,23 @@ int floatFloat2Int(unsigned uf) {
  *   Rating: 4
  */
 unsigned floatPower2(int x) {
-    return 2;
+    int INF = 0x000000ff << 23;
+    int bias = (1 << 7) - 1;
+    int exp = x + bias;
+    int Emax = ((1 << 8) - 1) - bias;
+    int Emin = 1 - bias - 23;
+    int Emax_dnorm = 1 - bias;
+    if (x > Emax) {
+        return INF;
+    } else if (x < Emin) {
+        return 0;
+    } else if (x < Emax_dnorm) {
+        // denormalized zone.
+        int shift = 23 - (Emax_dnorm - x);
+        return 1 << shift;
+    } else {
+        // normalized zone.
+        return exp << 23;
+    }
 }
+
