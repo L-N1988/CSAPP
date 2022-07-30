@@ -22,12 +22,60 @@ int is_transpose(int M, int N, int A[N][M], int B[M][N]);
 char transpose_submit_desc[] = "Transpose submission";
 void transpose_submit(int M, int N, int A[N][M], int B[M][N])
 {
+    int bsize = 8; /* only for (s, E, b) b == 5 case, block has 2^5=32 bytes which can store 8 ints(4 bytes) */
+    int i, j, jj;
+    int em = bsize * (M / bsize); /* Amount that fits evenly into blocks */
+    int diag;
+    for (jj = 0; jj < em; jj += bsize) {
+        for (i = 0; i < N; i++) {
+            for (j = jj; j < jj + bsize; j++) {
+                if (i == j) {
+                    // prevent evication between A and B when address map to the same cache set
+                    diag = A[i][i];
+                } else {
+                    B[j][i] = A[i][j];
+                }
+            }
+            // meet the real diangonal item 
+            if (i >= jj && i < jj + bsize) {
+                B[i][i] = diag;
+            }
+        }
+    }
 }
 
 /* 
  * You can define additional transpose functions below. We've defined
  * a simple one below to help you get started. 
  */ 
+
+/* 
+ * transpose for 64 * 64 Matrix
+ */
+char ultra_transpose_submit_desc64[] = "Ultra Transpose submission";
+void ultra_transpose_submit64(int M, int N, int A[N][M], int B[M][N])
+{
+    int bsize = 8; /* only for (s, E, b) b == 5 case, block has 2^5=32 bytes which can store 8 ints(4 bytes) */
+    int i, j, jj;
+    int em = bsize * (M / bsize); /* Amount that fits evenly into blocks */
+    int diag;
+    for (jj = 0; jj < em; jj += bsize) {
+        for (i = 0; i < N; i++) {
+            for (j = jj; j < jj + bsize; j++) {
+                if (i == j) {
+                    // prevent evication between A and B when address map to the same cache set
+                    diag = A[i][i];
+                } else {
+                    B[j][i] = A[i][j];
+                }
+            }
+            // meet the real diangonal item 
+            if (i >= jj && i < jj + bsize) {
+                B[i][i] = diag;
+            }
+        }
+    }
+}
 
 /* 
  * trans - A simple baseline transpose function, not optimized for the cache.
@@ -57,6 +105,9 @@ void registerFunctions()
 {
     /* Register your solution function */
     registerTransFunction(transpose_submit, transpose_submit_desc); 
+
+    /* Register your solution function */
+    registerTransFunction(ultra_transpose_submit64, ultra_transpose_submit_desc64); 
 
     /* Register any additional transpose functions */
     registerTransFunction(trans, trans_desc); 

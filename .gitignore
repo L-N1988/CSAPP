@@ -9,3 +9,6 @@ token
 test*
 *log*
 *problem*
+*.jpg
+*.o
+*.s
