@@ -1,7 +1,7 @@
 /* 
  * tsh - A tiny shell program with job control
  * 
- * Pluton 
+ * <Pluton 20220921>
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,9 +12,12 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include "csapp.h"
 
 /* Misc manifest constants */
+#ifndef MAXLINE 
 #define MAXLINE    1024   /* max line size */
+#endif
 #define MAXARGS     128   /* max args on a command line */
 #define MAXJOBS      16   /* max jobs at any point in time */
 #define MAXJID    1<<16   /* max job ID */
@@ -49,7 +52,6 @@ struct job_t {              /* The job struct */
     char cmdline[MAXLINE];  /* command line */
 };
 struct job_t jobs[MAXJOBS]; /* The job list */
-volatile sig_atomic pid;    /* my added global variable */
 /* End global variables */
 
 
@@ -81,16 +83,12 @@ int pid2jid(pid_t pid);
 void listjobs(struct job_t *jobs);
 
 void usage(void);
-void unix_error(char *msg);
-void app_error(char *msg);
 typedef void handler_t(int);
-handler_t *Signal(int signum, handler_t *handler);
 
 /*
  * main - The shell's main routine 
  */
-int main(int argc, char **argv) 
-{
+int main(int argc, char **argv) {
     char c;
     char cmdline[MAXLINE];
     int emit_prompt = 1; /* emit prompt (default) */
@@ -137,8 +135,9 @@ int main(int argc, char **argv)
             printf("%s", prompt);
             fflush(stdout);
         }
-        if ((fgets(cmdline, MAXLINE, stdin) == NULL) && ferror(stdin))
+        if ((fgets(cmdline, MAXLINE, stdin) == NULL) && ferror(stdin)) {
             app_error("fgets error");
+        }
         if (feof(stdin)) { /* End of file (ctrl-d) */
             fflush(stdout);
             exit(0);
@@ -152,7 +151,7 @@ int main(int argc, char **argv)
 
     exit(0); /* control never reaches here */
 }
-  
+
 /* 
  * eval - Evaluate the command line that the user has just typed in
  * 
@@ -163,67 +162,66 @@ int main(int argc, char **argv)
  * each child process must have a unique process group ID so that our
  * background children don't receive SIGINT (SIGTSTP) from the kernel
  * when we type ctrl-c (ctrl-z) at the keyboard.  
-*/
-void eval(char *cmdline) 
-{
-    char **myargv;
-    int bg;
-    int state;
-    sigset_t mask_all, mask_one, prev;
-
+ */
+void eval(char *cmdline) {
+    char *argv[MAXARGS]; /* Argument list execve() */
+    char buf[MAXLINE];   /* Holds modified command line */
+    int bg;              /* Should the job run in bg or fg? */
+    pid_t pid;           /* Process id */
+    sigset_t mask_all, mask_one, prev_one, prev_all;
     Sigfillset(&mask_all);
     Sigemptyset(&mask_one);
     Sigaddset(&mask_one, SIGCHLD);
 
-    bg = parseline(cmdline, myargv);
+    strcpy(buf, cmdline);
+    bg = parseline(buf, argv); 
+    if (argv[0] == NULL)  
+        return;   /* Ignore empty lines */
 
-    if (builtin_cmd(myargv)) {
-        /* 
-         * If name is a built-in command, then tsh should handle it immediately
-         * and wait for the next command line. 
-         */
-        if (strcmp(myargv[0], "quit")) {
-            ; /* Send SIGQUIT to tsh */
-        } else if (strcmp(myargv[0], "jobs")) {
-            listjobs(jobs);
-            return;
-        } else {
-            do_bgfg(myargv);
-        }
-        return;
-    } else {
-        /*
-         * shell forks a child process, 
-         * then loads and runs the program in the context of the child. 
-         */
-        Sigprocmask(SIG_BLOCK, &mask_one, &prev); /* Block SIGCHLD */
-        if ((pid = Fork()) == 0) { /* Child process */
-            /*  
-             *  puts the child in a new process group 
-             *  whose group ID is identical to the child’s PID. 
-             */
+    if (!builtin_cmd(argv)) { 
+        Sigprocmask(SIG_BLOCK, &mask_one, &prev_one); /* Block SIGCHLD */
+        if ((pid = Fork()) == 0) {   /* Child runs user job */
+            Sigprocmask(SIG_SETMASK, &prev_one, NULL); /* Unblock SIGCHLD */
+            /* puts the child in a new process group whose group ID is identical to the child’s PID. */
             setpgid(0, 0); 
+            if (execve(argv[0], argv, environ) < 0) {
+                Sio_puts(argv[0]);
+                Sio_puts(": Command not found.\n");
+                exit(0);
+            }
+        }
 
-            Sigprocmask(SIG_SETMASK, &prev, NULL); /* Unblock SIGCHLD */
-            if (execve(myargv[0], myargv, environ) < 0) {
-                unix_error(myargv[0]);
-                exit(1);
+        Sigprocmask(SIG_BLOCK, &mask_all, NULL); /* Parent process */  
+        addjob(jobs, pid, (bg) ? BG : FG, cmdline);  /* Add the child to the job list */
+        Sigprocmask(SIG_SETMASK, &prev_one, NULL);  /* Unblock SIGCHLD */
+
+        /* Parent waits for foreground job to terminate */
+        if (!bg) {
+            int status;
+            pid_t wpid;
+            if ((wpid = waitpid(pid, &status, 0)) < 0) {
+                unix_error("waitfg: waitpid error");
             }
-        }
-        Sigprocmask(SIG_BLOCK, &mask_all, NULL); /* Parent process */
-        addjob(jobs, pid, state, cmdline); /* How to know the state of process? */
-        Sigprocmask(SIG_SETMASK, &prev, NULL); /* Unblock SIGCHLD */
-        if (bg) {
-            return;
+            if (WIFEXITED(status)) {
+                Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+                deletejob(jobs, wpid); /* Delete the child from the job list */
+                Sigprocmask(SIG_SETMASK, &prev_all, NULL);
+            } else {
+                Sio_puts("Child ");
+                Sio_putl(wpid);
+                Sio_puts(" terminated abnormally\n");
+            }
         } else {
-            /* wait for SIGCHLD to be received */
-            pid = 0;
-            while (!pid) {
-                Sigsuspend(&prev);
-            }
+            Sio_puts("[");
+            Sio_putl(pid2jid(pid));
+            Sio_puts("] ");
+            Sio_puts("(");
+            Sio_putl( pid);
+            Sio_puts(") ");
+            Sio_puts(cmdline);
         }
-        return;
     }
+    return;
 }
 
 /* 
@@ -233,8 +231,7 @@ void eval(char *cmdline)
  * argument.  Return true if the user has requested a BG job, false if
  * the user has requested a FG job.  
  */
-int parseline(const char *cmdline, char **argv) 
-{
+int parseline(const char *cmdline, char **argv) {
     static char array[MAXLINE]; /* holds local copy of command line */
     char *buf = array;          /* ptr that traverses command line */
     char *delim;                /* points to first space delimiter */
@@ -243,8 +240,9 @@ int parseline(const char *cmdline, char **argv)
 
     strcpy(buf, cmdline);
     buf[strlen(buf)-1] = ' ';  /* replace trailing '\n' with space */
-    while (*buf && (*buf == ' ')) /* ignore leading spaces */
+    while (*buf && (*buf == ' ')) { /* ignore leading spaces */
         buf++;
+    }
 
     /* Build the argv list */
     argc = 0;
@@ -268,11 +266,15 @@ int parseline(const char *cmdline, char **argv)
             delim = strchr(buf, '\'');
         }
         else {
+            /* 
+             * The strchr() function returns a pointer to the 
+             * matched character or NULL if the character is not found.
+             */
             delim = strchr(buf, ' ');
         }
     }
     argv[argc] = NULL;
-    
+
     if (argc == 0)  /* ignore blank line */
         return 1;
 
@@ -284,12 +286,28 @@ int parseline(const char *cmdline, char **argv)
 }
 
 /* 
- * builtin_cmd - If the user has typed a built-in command then execute
- *    it immediately.  
+ * builtin_cmd - If the user has typed a built-in command :
+ *    quit, fg, bg, and jobs
+ * then execute it immediately and return true.  
  */
 int builtin_cmd(char **argv) 
 {
-    return 0;     /* not a builtin command */
+    if (!strcmp(argv[0], "quit")) {/* quit command */
+        exit(0);  
+    }
+    if (!strcmp(argv[0], "fg")) { /* fg command */
+        do_bgfg(argv);
+        return 1;
+    }
+    if (!strcmp(argv[0], "bg")) { /* bg command */
+        do_bgfg(argv);
+        return 1;
+    }
+    if (!strcmp(argv[0], "jobs")) { /* jobs command */
+        listjobs(jobs);
+        return 1;
+    }
+    return 0;                     /* Not a builtin command */
 }
 
 /* 
@@ -297,21 +315,6 @@ int builtin_cmd(char **argv)
  */
 void do_bgfg(char **argv) 
 {
-    if (strcmp(argv[0], "bg")) {
-        int fgpid = fgpid(jobs);
-        if (fgpid != 0) {
-            /* Send signal with kill function */
-        } else {
-            printf("tsh: bg: current: no such job\n");
-        }
-    } else {
-        int fgpid = fgpid(jobs);
-        if (fgpid != 0) {
-            /* Send signal with kill function */
-        } else {
-            printf("tsh: fg: current: no such job\n");
-        }
-    }
     return;
 }
 
@@ -320,11 +323,7 @@ void do_bgfg(char **argv)
  */
 void waitfg(pid_t pid)
 {
-    int fgpid = fgpid(jobs);
-    int status;
-    if (fgpid == pid) {
-        waitpid(pid, &status, 0);
-    }
+    return;
 }
 
 /*****************
@@ -341,8 +340,21 @@ void waitfg(pid_t pid)
 void sigchld_handler(int sig) 
 {
     int olderrno = errno;
-    pid = Waitpid(-1, NULL, 0); /* Main is waiting for nonzero pid */
+    sigset_t mask_all, prev_all;
+    pid_t pid;
+    Sigfillset(&mask_all);
+    while ((pid = waitpid(-1, NULL, 0)) > 0) { /* Reap a zombie child */
+        Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+        deletejob(jobs, pid); /* Delete the child from the job list */
+        Sio_puts("Sigchld handler reaped child #");
+        Sio_putl(pid);
+        Sio_puts("\n");
+        Sigprocmask(SIG_SETMASK, &prev_all, NULL);
+    }
+    if (errno != ECHILD)
+        Sio_error("waitpid error");
     errno = olderrno;
+    return;
 }
 
 /* 
@@ -352,10 +364,7 @@ void sigchld_handler(int sig)
  */
 void sigint_handler(int sig) 
 {
-    int fgpid = fgpid(jobs);
-    if (fgpid != 0) {
-        kill(-fgpid, sig);
-    }
+    return;
 }
 
 /*
@@ -365,10 +374,7 @@ void sigint_handler(int sig)
  */
 void sigtstp_handler(int sig) 
 {
-    int fgpid = fgpid(jobs);
-    if (fgpid != 0) {
-        kill(-fgpid, sig); /* Send signal with kill function */
-    }
+    return;
 }
 
 /*********************
@@ -392,7 +398,7 @@ void initjobs(struct job_t *jobs) {
     int i;
 
     for (i = 0; i < MAXJOBS; i++)
-	clearjob(&jobs[i]);
+        clearjob(&jobs[i]);
 }
 
 /* maxjid - Returns largest allocated job ID */
@@ -401,8 +407,8 @@ int maxjid(struct job_t *jobs)
     int i, max=0;
 
     for (i = 0; i < MAXJOBS; i++)
-	if (jobs[i].jid > max)
-	    max = jobs[i].jid;
+        if (jobs[i].jid > max)
+            max = jobs[i].jid;
     return max;
 }
 
@@ -410,7 +416,7 @@ int maxjid(struct job_t *jobs)
 int addjob(struct job_t *jobs, pid_t pid, int state, char *cmdline) 
 {
     int i;
-    
+
     if (pid < 1)
         return 0;
 
@@ -422,7 +428,7 @@ int addjob(struct job_t *jobs, pid_t pid, int state, char *cmdline)
             if (nextjid > MAXJOBS)
                 nextjid = 1;
             strcpy(jobs[i].cmdline, cmdline);
-            if (verbose) {
+            if(verbose){
                 printf("Added job [%d] %d %s\n", jobs[i].jid, jobs[i].pid, jobs[i].cmdline);
             }
             return 1;
@@ -544,40 +550,6 @@ void usage(void)
     printf("   -v   print additional diagnostic information\n");
     printf("   -p   do not emit a command prompt\n");
     exit(1);
-}
-
-/*
- * unix_error - unix-style error routine
- */
-void unix_error(char *msg)
-{
-    fprintf(stdout, "%s: %s\n", msg, strerror(errno));
-    exit(1);
-}
-
-/*
- * app_error - application-style error routine
- */
-void app_error(char *msg)
-{
-    fprintf(stdout, "%s\n", msg);
-    exit(1);
-}
-
-/*
- * Signal - wrapper for the sigaction function
- */
-handler_t *Signal(int signum, handler_t *handler) 
-{
-    struct sigaction action, old_action;
-
-    action.sa_handler = handler;  
-    sigemptyset(&action.sa_mask); /* block sigs of type being handled */
-    action.sa_flags = SA_RESTART; /* restart syscalls if possible */
-
-    if (sigaction(signum, &action, &old_action) < 0)
-        unix_error("Signal error");
-    return (old_action.sa_handler);
 }
 
 /*

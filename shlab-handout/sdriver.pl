@@ -3,6 +3,7 @@
 use Getopt::Std;
 use FileHandle;
 use IPC::Open2;
+use Term::ANSIColor;
 
 #######################################################################
 # sdriver.pl - Shell driver
@@ -72,20 +73,20 @@ $grade = $opt_g;
 
 # Make sure the input script exists and is readable
 -e $infile
-    or die "$0: ERROR: $infile not found\n";
+    or die colored("$0: ", 'bold yellow'), "ERROR: $infile not found\n";
 -r $infile
-    or die "$0: ERROR: $infile is not readable\n";
+    or die colored("$0: ", 'bold yellow'), "ERROR: $infile is not readable\n";
 
 # Make sure the shell program exists and is executable
 -e $shellprog
-    or die "$0: ERROR: $shellprog not found\n";
+    or die colored("$0: ", 'bold yellow'), "ERROR: $shellprog not found\n";
 -x $shellprog
-    or die "$0: ERROR: $shellprog is not executable\n";
+    or die colored("$0: ", 'bold yellow'), "ERROR: $shellprog is not executable\n";
 
 
 # Open the input script
 open INFILE, $infile
-    or die "$0: ERROR: Couldn't open input file $infile: $!\n";
+    or die colored("$0: ", 'bold yellow'), "ERROR: Couldn't open input file $infile: $!\n";
 
 # 
 # Fork a child, run the shell in it, and connect the parent
@@ -116,14 +117,14 @@ while (<INFILE>) {
     # Blank line
     elsif ($line =~ /^\s*$/) { 
 	if ($verbose) {
-	    print "$0: Ignoring blank line\n";
+	    print colored("$0: ", 'bold yellow'), "Ignoring blank line\n";
 	}
     }
 
     # Send SIGTSTP (ctrl-z)
     elsif ($line =~ /TSTP/) {
 	if ($verbose) {
-	    print "$0: Sending SIGTSTP signal to process $pid\n";
+	    print colored("$0: ", 'bold yellow'), "Sending SIGTSTP signal to process $pid\n";
 	}
 	kill 'TSTP', $pid;
     }
@@ -131,7 +132,7 @@ while (<INFILE>) {
     # Send SIGINT (ctrl-c)
     elsif ($line =~ /INT/) {
 	if ($verbose) {
-	    print "$0: Sending SIGINT signal to process $pid\n";
+	    print colored("$0: ", 'bold yellow'), "Sending SIGINT signal to process $pid\n";
 	}
 	kill 'INT', $pid;
     }
@@ -139,7 +140,7 @@ while (<INFILE>) {
     # Send SIGQUIT (whenever we need graceful termination)
     elsif ($line =~ /QUIT/) {
 	if ($verbose) {
-	    print "$0: Sending SIGQUIT signal to process $pid\n";
+	    print colored("$0: ", 'bold yellow'), "Sending SIGQUIT signal to process $pid\n";
 	}
 	kill 'QUIT', $pid;
     }
@@ -147,7 +148,7 @@ while (<INFILE>) {
     # Send SIGKILL 
     elsif ($line =~ /KILL/) {
 	if ($verbose) {
-	    print "$0: Sending SIGKILL signal to process $pid\n";
+	    print colored("$0: ", 'bold yellow'), "Sending SIGKILL signal to process $pid\n";
 	}
 	kill 'KILL', $pid;
     }
@@ -155,7 +156,7 @@ while (<INFILE>) {
     # Close pipe (sends EOF notification to child)
     elsif ($line =~ /CLOSE/) {
 	if ($verbose) {
-	    print "$0: Closing output end of pipe to child $pid\n";
+	    print colored("$0: ", 'bold yellow'), "Closing output end of pipe to child $pid\n";
 	}
 	close Writer;
     }
@@ -163,11 +164,11 @@ while (<INFILE>) {
     # Wait for child to terminate
     elsif ($line =~ /WAIT/) {
 	if ($verbose) {
-	    print "$0: Waiting for child $pid\n";
+	    print colored("$0: ", 'bold yellow'), "Waiting for child $pid\n";
 	}
 	wait;
 	if ($verbose) {
-	    print "$0: Child $pid reaped\n";
+	    print colored("$0: ", 'bold yellow'), "Child $pid reaped\n";
 	}
     }
 
@@ -182,7 +183,7 @@ while (<INFILE>) {
     # Unknown input
     else {
 	if ($verbose) {
-	    print "$0: Sending :$line: to child $pid\n";
+	    print colored("$0: ", 'bold yellow'), "Sending :$line: to child $pid\n";
 	}
 	print Writer "$line\n";
     }
@@ -193,7 +194,7 @@ while (<INFILE>) {
 #
 close Writer;
 if ($verbose) {
-    print "$0: Reading data from child $pid\n";
+    print colored("$0: ", 'bold yellow'), "Reading data from child $pid\n";
 }
 while ($line = <Reader>) {
     print $line;
@@ -204,7 +205,7 @@ close Reader;
 wait;
 
 if ($verbose) {
-    print "$0: Shell terminated\n";
+    print colored("$0: ", 'bold yellow'), "Shell terminated\n";
 }
 
 exit;
