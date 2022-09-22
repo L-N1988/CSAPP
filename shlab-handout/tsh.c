@@ -172,7 +172,6 @@ void eval(char *cmdline) {
     Sigfillset(&mask_all);
     Sigemptyset(&mask_one);
     Sigaddset(&mask_one, SIGCHLD);
-
     strcpy(buf, cmdline);
     bg = parseline(buf, argv); 
     if (argv[0] == NULL)  
@@ -193,15 +192,20 @@ void eval(char *cmdline) {
 
         Sigprocmask(SIG_BLOCK, &mask_all, NULL); /* Parent process */  
         addjob(jobs, pid, (bg) ? BG : FG, cmdline);  /* Add the child to the job list */
-        Sigprocmask(SIG_SETMASK, &prev_one, NULL);  /* Unblock SIGCHLD */
 
         /* Parent waits for foreground job to terminate */
         if (!bg) {
+            Sio_puts("\n"); Sio_puts("listing jobs.\n");
+            listjobs(jobs);
             int status;
             pid_t wpid;
-            if ((wpid = waitpid(pid, &status, 0)) < 0) {
+            Sio_puts("Waiting pid #"); Sio_putl(pid); Sio_puts("\t("); Sio_putl(pid); Sio_puts(")"); 
+            Sio_puts(" working forground.\n");
+            /// if ((wpid = waitpid(pid, &status, 0)) < 0) {
+            if ((wpid = Wait(&status)) < 0) {
                 unix_error("waitfg: waitpid error");
             }
+            Sio_puts("Wait finished!!!!!!!!!!!!!!!!!\n");
             if (WIFEXITED(status)) {
                 Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
                 deletejob(jobs, wpid); /* Delete the child from the job list */
@@ -212,6 +216,8 @@ void eval(char *cmdline) {
                 Sio_puts(" terminated abnormally\n");
             }
         } else {
+            Sio_puts("("); Sio_putl(pid); Sio_puts(")"); Sio_puts(" working background.\n");
+
             Sio_puts("[");
             Sio_putl(pid2jid(pid));
             Sio_puts("] ");
@@ -220,6 +226,7 @@ void eval(char *cmdline) {
             Sio_puts(") ");
             Sio_puts(cmdline);
         }
+        Sigprocmask(SIG_SETMASK, &prev_one, NULL);  /* Unblock SIGCHLD */
     }
     return;
 }
@@ -290,8 +297,7 @@ int parseline(const char *cmdline, char **argv) {
  *    quit, fg, bg, and jobs
  * then execute it immediately and return true.  
  */
-int builtin_cmd(char **argv) 
-{
+int builtin_cmd(char **argv) {
     if (!strcmp(argv[0], "quit")) {/* quit command */
         exit(0);  
     }
@@ -304,6 +310,8 @@ int builtin_cmd(char **argv)
         return 1;
     }
     if (!strcmp(argv[0], "jobs")) { /* jobs command */
+        // TODO: stdout race condition between main and perl script
+        Sio_puts("beginning jobs.\n");
         listjobs(jobs);
         return 1;
     }
@@ -313,16 +321,15 @@ int builtin_cmd(char **argv)
 /* 
  * do_bgfg - Execute the builtin bg and fg commands
  */
-void do_bgfg(char **argv) 
-{
+void do_bgfg(char **argv) {
     return;
 }
 
 /* 
  * waitfg - Block until process pid is no longer the foreground process
  */
-void waitfg(pid_t pid)
-{
+void waitfg(pid_t pid) {
+    while (pid2jid(pid)) {} ;
     return;
 }
 

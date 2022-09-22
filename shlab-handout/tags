@@ -109,12 +109,12 @@ Write	csapp.c	/^ssize_t Write(int fd, const void *buf, size_t count) $/;"	f
 __CSAPP_H__	csapp.h	6;"	d
 addjob	tsh.c	/^int addjob(struct job_t *jobs, pid_t pid, int state, char *cmdline) $/;"	f
 app_error	csapp.c	/^void app_error(char *msg) \/* Application error *\/$/;"	f
-builtin_cmd	tsh.c	/^int builtin_cmd(char **argv) $/;"	f
+builtin_cmd	tsh.c	/^int builtin_cmd(char **argv) {$/;"	f
 clearjob	tsh.c	/^void clearjob(struct job_t *job) {$/;"	f
 cmdline	tsh.c	/^    char cmdline[MAXLINE];  \/* command line *\/$/;"	m	struct:job_t	file:
 deletejob	tsh.c	/^int deletejob(struct job_t *jobs, pid_t pid) $/;"	f
 dns_error	csapp.c	/^void dns_error(char *msg) \/* Obsolete gethostbyname error *\/$/;"	f
-do_bgfg	tsh.c	/^void do_bgfg(char **argv) $/;"	f
+do_bgfg	tsh.c	/^void do_bgfg(char **argv) {$/;"	f
 eval	tsh.c	/^void eval(char *cmdline) {$/;"	f
 fgpid	tsh.c	/^pid_t fgpid(struct job_t *jobs) {$/;"	f
 gai_error	csapp.c	/^void gai_error(int code, char *msg) \/* Getaddrinfo-style error *\/$/;"	f
@@ -168,4 +168,4 @@ unix_error	csapp.c	/^void unix_error(char *msg) \/* Unix-style error *\/$/;"	f
 usage	sdriver.pl	/^sub usage $/;"	s
 usage	tsh.c	/^void usage(void) $/;"	f
 verbose	tsh.c	/^int verbose = 0;            \/* if true, print additional output *\/$/;"	v
-waitfg	tsh.c	/^void waitfg(pid_t pid)$/;"	f
+waitfg	tsh.c	/^void waitfg(pid_t pid) {$/;"	f

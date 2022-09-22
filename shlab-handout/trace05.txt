@@ -6,3 +6,10 @@
 
 /bin/echo tsh> jobs
 jobs
+
+/bin/echo -e tsh> ./myspin 30 \046
+./myspin 30 &
+
+/bin/echo tsh> jobs
+jobs
+
